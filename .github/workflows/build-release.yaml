@@ -1,0 +1,126 @@
+name: build & release
+
+on:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            runner: macos-latest
+            target: x86_64-macos
+            output: fasttrack
+          - os: macos-latest
+            runner: macos-14
+            target: aarch64-macos
+            output: fasttrack
+          - os: ubuntu-latest
+            runner: ubuntu-latest
+            target: x86_64-linux
+            output: fasttrack
+          - os: ubuntu-latest
+            runner: ubuntu-latest
+            target: aarch64-linux
+            output: fasttrack
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.2
+
+      - name: Build fasttrack
+        run: |
+          zig build-exe src/main.zig -femit-bin=fasttrack -O ReleaseFast
+
+      - name: Test binary
+        run: ./fasttrack --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: fasttrack-${{ matrix.target }}
+          path: fasttrack
+
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create checksums
+        run: |
+          mkdir -p dist
+          for dir in artifacts/*/; do
+            target=$(basename "$dir")
+            cp "$dir/fasttrack" "dist/fasttrack-${target}"
+            chmod +x "dist/fasttrack-${target}"
+          done
+          cd dist && sha256sum * > SHA256SUMS && cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/fasttrack-*
+            dist/SHA256SUMS
+          body: |
+            ## Installation
+
+            Download the appropriate binary for your platform and add it to your PATH:
+
+            ```bash
+            # macOS x86_64
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-x86_64-macos -o /usr/local/bin/fasttrack
+
+            # macOS ARM64 (Apple Silicon)
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-aarch64-macos -o /usr/local/bin/fasttrack
+
+            # Linux x86_64
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-x86_64-linux -o /usr/local/bin/fasttrack
+
+            # Linux ARM64
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-aarch64-linux -o /usr/local/bin/fasttrack
+
+            chmod +x /usr/local/bin/fasttrack
+            ```
+
+            ## Verification
+
+            Verify the download with SHA256:
+
+            ```bash
+            sha256sum -c SHA256SUMS
+            ```
+
+  lint-zig:
+    name: Lint Zig Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.15.2
+      - name: Check Zig formatting
+        run: zig fmt --check src/
