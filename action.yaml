@@ -13,20 +13,24 @@ runs:
     - name: Download & Run fasttrack
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         OS=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
         ARCH=$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')
         [ "$ARCH" = "x64" ] && ARCH="x86_64"
         [ "$ARCH" = "arm64" ] && ARCH="aarch64"
 
-        BINARY_NAME="fasttrack-$ARCH-$OS"
-        TARGET_PATH="${{ github.action_path }}/$BINARY_NAME"
-        VERSION="${{ github.action_ref }}"
+        EXT=""
+        if [[ "$OS" == "windows" ]]; then EXT=".exe"; fi
 
+        BINARY_NAME="fasttrack-$ARCH-$OS$EXT"
+        TARGET_PATH="${{ github.action_path }}/$BINARY_NAME"
+
+        VERSION="${{ github.action_ref }}"
         if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
-          echo "Looking for newest available release (including alphas)..."
-          VERSION=$(gh release list --repo ${{ github.action_repository }} --limit 1 | awk '{print $3}')
+          echo "Looking for newest available release..."
+          # Safer way to get the tag name using JSON/JQ
+          VERSION=$(gh release list --repo ${{ github.action_repository }} --limit 1 --json tagName --jq '.[0].tagName')
         fi
 
         if [ ! -f "$TARGET_PATH" ]; then
@@ -39,7 +43,9 @@ runs:
               echo "::error::Could not find asset $BINARY_NAME in release $VERSION"
               exit 1
             }
-          chmod +x "$TARGET_PATH"
+          
+          # Only chmod on non-Windows
+          [[ "$OS" != "windows" ]] && chmod +x "$TARGET_PATH"
           echo "::endgroup::"
         fi
 
