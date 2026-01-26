@@ -1,0 +1,30 @@
+name: "Run fasttrack"
+description: "Download and run fasttrack tasks"
+inputs:
+  args:
+    description: "Arguments to pass to fasttrack"
+    required: true
+  version:
+    description: "Zig version"
+    required: false
+    default: "0.13.0"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Zig
+      uses: mlugg/setup-zig@v1
+      with:
+        version: ${{ inputs.version }}
+
+    - name: Build fasttrack
+      shell: bash
+      run: |
+        zig build-exe src/main.zig -O ReleaseFast -femit-bin=fasttrack_bin
+      working-directory: ${{ github.action_path }}
+
+    - name: Run fasttrack
+      shell: bash
+      run: |
+        chmod +x ${{ github.action_path }}/fasttrack_bin
+        ${{ github.action_path }}/fasttrack_bin ${{ inputs.args }}
