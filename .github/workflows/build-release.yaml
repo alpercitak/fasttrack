@@ -2,84 +2,72 @@ name: build & release
 
 on:
   push:
-    tags:
-      - "v*"
-    branches:
-      - main
+    tags: ["v*"]
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+    name: Build Binaries
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - os: macos-latest
-            runner: macos-latest
-            target: x86_64-macos
-            output: fasttrack
-          - os: macos-latest
-            runner: macos-14
-            target: aarch64-macos
-            output: fasttrack
-          - os: ubuntu-latest
-            runner: ubuntu-latest
-            target: x86_64-linux
-            output: fasttrack
-          - os: ubuntu-latest
-            runner: ubuntu-latest
-            target: aarch64-linux
-            output: fasttrack
+        target: [x86_64-linux, aarch64-linux, x86_64-macos, aarch64-macos]
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
 
-      - name: Build fasttrack
-        run: |
-          zig build-exe src/main.zig -femit-bin=fasttrack -O ReleaseFast
+      # Optimization flags:
+      # -O ReleaseSmall: Best for CLI tools to keep downloads fast
+      # -target: The magic of Zig cross-compilation
+      # -fstrip: Removes debug symbols to shrink binary (e.g., 5MB -> 500KB)
+      - run: |
+          zig build-exe src/main.zig \
+            -O ReleaseSmall \
+            -target ${{ matrix.target }} \
+            -fstrip \
+            -femit-bin=fasttrack-${{ matrix.target }}
 
-      - name: Test binary
-        run: ./fasttrack --help
+      - name: Test (Native Only)
+        if: matrix.target == 'x86_64-linux'
+        run: ./fasttrack-x86_64-linux --help
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: fasttrack-${{ matrix.target }}
-          path: fasttrack
+          path: fasttrack-${{ matrix.target }}
 
   create-release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Download artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
           path: artifacts
+          merge-multiple: true
 
-      - name: Create checksums
+      - name: Prepare Assets & Checksums
         run: |
-          mkdir -p dist
-          for dir in artifacts/*/; do
-            target=$(basename "$dir")
-            cp "$dir/fasttrack" "dist/fasttrack-${target}"
-            chmod +x "dist/fasttrack-${target}"
-          done
-          cd dist && sha256sum * > SHA256SUMS && cd ..
+          mkdir dist
+          mv artifacts/fasttrack-* dist/
+          cd dist
+          sha256sum fasttrack-* > SHA256SUMS
+        shell: bash
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -87,42 +75,16 @@ jobs:
           files: |
             dist/fasttrack-*
             dist/SHA256SUMS
+          generate_release_notes: true
           body: |
-            ## Installation
+            ### Installation
+            Download the binary for your platform and move it to your bin folder:
+            `chmod +x fasttrack-<target> && mv fasttrack-<target> /usr/local/bin/fasttrack`
 
-            Download the appropriate binary for your platform and add it to your PATH:
-
-            ```bash
-            # macOS x86_64
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-x86_64-macos -o /usr/local/bin/fasttrack
-
-            # macOS ARM64 (Apple Silicon)
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-aarch64-macos -o /usr/local/bin/fasttrack
-
-            # Linux x86_64
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-x86_64-linux -o /usr/local/bin/fasttrack
-
-            # Linux ARM64
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/fasttrack-aarch64-linux -o /usr/local/bin/fasttrack
-
-            chmod +x /usr/local/bin/fasttrack
-            ```
-
-            ## Verification
-
-            Verify the download with SHA256:
-
-            ```bash
-            sha256sum -c SHA256SUMS
-            ```
-
-  lint-zig:
-    name: Lint Zig Code
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-      - name: Check Zig formatting
-        run: zig fmt --check src/
+      - name: Check Formatting
+        run: zig fmt --check .
