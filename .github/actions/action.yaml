@@ -1,5 +1,7 @@
 name: "Run fasttrack"
+
 description: "Download and run fasttrack tasks"
+
 inputs:
   args:
     description: "Arguments to pass to fasttrack"
