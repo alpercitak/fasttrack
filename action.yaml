@@ -12,9 +12,9 @@ runs:
   steps:
     - name: Download & Run fasttrack
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
+      id: vars
       run: |
+        # 1. Normalize OS and Arch
         OS=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
         ARCH=$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')
         [ "$ARCH" = "x64" ] && ARCH="x86_64"
@@ -23,30 +23,53 @@ runs:
         EXT=""
         if [[ "$OS" == "windows" ]]; then EXT=".exe"; fi
 
-        BINARY_NAME="fasttrack-$ARCH-$OS$EXT"
-        TARGET_PATH="${{ github.action_path }}/$BINARY_NAME"
+        # 2. Determine Repository (with fallback to avoid empty string errors)
+        ACTION_REPO="${{ github.action_repository }}"
+        if [ -z "$ACTION_REPO" ]; then ACTION_REPO="alpercitak/fasttrack"; fi
 
+        # 3. Determine the version
         VERSION="${{ github.action_ref }}"
         if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
           echo "Looking for newest available release..."
-          # Safer way to get the tag name using JSON/JQ
-          VERSION=$(gh release list --repo ${{ github.action_repository }} --limit 1 --json tagName --jq '.[0].tagName')
+          # Using quotes and explicit flags to prevent command-line shifting
+          VERSION=$(gh release list --repo "$ACTION_REPO" --limit 1 --json tagName --jq '.[0].tagName')
         fi
 
-        if [ ! -f "$TARGET_PATH" ]; then
-          echo "::group::Downloading $BINARY_NAME from Release [$VERSION]"
-          gh release download "$VERSION" \
-            --repo ${{ github.action_repository }} \
-            --pattern "$BINARY_NAME" \
-            --output "$TARGET_PATH" \
-            --clobber || {
-              echo "::error::Could not find asset $BINARY_NAME in release $VERSION"
-              exit 1
-            }
-          
-          # Only chmod on non-Windows
-          [[ "$OS" != "windows" ]] && chmod +x "$TARGET_PATH"
-          echo "::endgroup::"
-        fi
+        # 4. Export for other steps
+        echo "binary_name=fasttrack-$ARCH-$OS$EXT" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "target_path=${{ github.action_path }}/fasttrack-$ARCH-$OS$EXT" >> $GITHUB_OUTPUT
+        echo "os=$OS" >> $GITHUB_OUTPUT
+        echo "repo=$ACTION_REPO" >> $GITHUB_OUTPUT
 
-        "$TARGET_PATH" ${{ inputs.args }}
+    - name: Cache fasttrack binary
+      id: cache-fasttrack
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.vars.outputs.target_path }}
+        key: fasttrack-${{ steps.vars.outputs.os }}-${{ steps.vars.outputs.version }}
+
+    - name: Download fasttrack
+      if: steps.cache-fasttrack.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Downloading ${{ steps.vars.outputs.binary_name }} from Release [${{ steps.vars.outputs.version }}]"
+        gh release download "${{ steps.vars.outputs.version }}" \
+          --repo "${{ steps.vars.outputs.repo }}" \
+          --pattern "${{ steps.vars.outputs.binary_name }}" \
+          --output "${{ steps.vars.outputs.target_path }}" \
+          --clobber || {
+            echo "::error::Could not find asset ${{ steps.vars.outputs.binary_name }} in release ${{ steps.vars.outputs.version }}"
+            exit 1
+          }
+
+        # Apply execution permissions on Unix-like systems
+        [[ "${{ steps.vars.outputs.os }}" != "windows" ]] && chmod +x "${{ steps.vars.outputs.target_path }}"
+        echo "::endgroup::"
+
+    - name: Run fasttrack
+      shell: bash
+      run: |
+        "${{ steps.vars.outputs.target_path }}" ${{ inputs.args }}
