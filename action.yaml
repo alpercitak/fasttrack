@@ -13,6 +13,8 @@ runs:
     - name: Download & Run fasttrack
       shell: bash
       id: vars
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         # 1. Normalize OS and Arch
         OS=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
