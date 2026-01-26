@@ -6,27 +6,34 @@ inputs:
   args:
     description: "Arguments to pass to fasttrack"
     required: true
-  version:
-    description: "Zig version"
-    required: false
-    default: "0.13.0"
 
 runs:
   using: "composite"
   steps:
-    - name: Setup Zig
-      uses: mlugg/setup-zig@v2
-      with:
-        version: ${{ inputs.version }}
-
-    - name: Build fasttrack
+    - name: Download & Run fasttrack
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        zig build-exe src/main.zig -O ReleaseFast -femit-bin=fasttrack_bin
-      working-directory: ${{ github.action_path }}
+        # 1. Identify the correct binary for this runner
+        OS=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
+        ARCH=$(echo "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')
+        [ "$ARCH" = "x64" ] && ARCH="x86_64"
+        [ "$ARCH" = "arm64" ] && ARCH="aarch64"
 
-    - name: Run fasttrack
-      shell: bash
-      run: |
-        chmod +x ${{ github.action_path }}/fasttrack_bin
-        ${{ github.action_path }}/fasttrack_bin ${{ inputs.args }}
+        BINARY_NAME="fasttrack-$ARCH-$OS"
+        TARGET_PATH="${{ github.action_path }}/$BINARY_NAME"
+
+        # 2. Download from the latest release of this action's repo
+        # Note: 'gh release download' is faster and more reliable than curl
+        if [ ! -f "$TARGET_PATH" ]; then
+          echo "::group::Downloading $BINARY_NAME"
+          gh release download --repo ${{ github.repository }} \
+            --pattern "$BINARY_NAME" \
+            --output "$TARGET_PATH"
+          chmod +x "$TARGET_PATH"
+          echo "::endgroup::"
+        fi
+
+        # 3. Execute
+        "$TARGET_PATH" ${{ inputs.args }}
