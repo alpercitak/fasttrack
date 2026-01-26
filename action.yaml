@@ -22,19 +22,21 @@ runs:
 
         BINARY_NAME="fasttrack-$ARCH-$OS"
         TARGET_PATH="${{ github.action_path }}/$BINARY_NAME"
+        VERSION="${{ github.action_ref }}"
 
-        # Extract version from the 'uses' string or default to latest
-        # This regex gets the version after the '@' symbol
-        VERSION=$(echo "${{ github.action_ref }}" | grep -oP 'v[\d.]+(-[\w.]+)?' || echo "latest")
+        if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
+          echo "Looking for newest available release (including alphas)..."
+          VERSION=$(gh release list --repo ${{ github.action_repository }} --limit 1 | awk '{print $3}')
+        fi
 
         if [ ! -f "$TARGET_PATH" ]; then
-          echo "::group::Downloading $BINARY_NAME from Release $VERSION"
-          # We add the VERSION variable here to ensure it hits the right release
+          echo "::group::Downloading $BINARY_NAME from Release [$VERSION]"
           gh release download "$VERSION" \
-            --repo ${{ github.repository }} \
+            --repo ${{ github.action_repository }} \
             --pattern "$BINARY_NAME" \
-            --output "$TARGET_PATH" || {
-              echo "::error::Release $VERSION not found. Did you publish it?"
+            --output "$TARGET_PATH" \
+            --clobber || {
+              echo "::error::Could not find asset $BINARY_NAME in release $VERSION"
               exit 1
             }
           chmod +x "$TARGET_PATH"
