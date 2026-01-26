@@ -1,0 +1,13 @@
+.git
+.github/appmod
+target/
+*.o
+*.a
+.DS_Store
+main
+fasttrack
+dist/
+*.zip
+*.tar.gz
+.env
+.env.local
