@@ -11,3 +11,5 @@ lint:
 clean:
 	rm -rf zig-out .zig-cache
 
+build:
+	 zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=fasttrack
