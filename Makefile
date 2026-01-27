@@ -16,5 +16,6 @@ clean:
 build:
 	 zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=fasttrack 
 
+# Bump version (make bump VERSION=v0.1.8-alpha)
 bump:
 	echo $(VERSION) > VERSION
