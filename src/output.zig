@@ -18,7 +18,7 @@ pub fn printHelp() void {
         \\  --base=<ref>   Base git ref for --affected (default: origin/main)
         \\  --parallel     Run tasks in parallel
         \\  --dry-run      Show commands without executing
-        \\  --verbose, -v  Show detailed output
+        \\  --verbose      Show detailed output
         \\  --json         Output results as JSON
         \\  --help, -h     Show this help
         \\

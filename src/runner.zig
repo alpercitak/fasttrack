@@ -1,5 +1,6 @@
 const std = @import("std");
 const detect = @import("detect.zig");
+const config = @import("config.zig");
 
 pub fn runTask(
     allocator: std.mem.Allocator,
@@ -8,6 +9,7 @@ pub fn runTask(
     target: []const u8,
     affected: bool,
     base_ref: []const u8,
+    cfg: config.Config,
 ) !void {
     var argv = std.ArrayListUnmanaged([]const u8){};
     defer argv.deinit(allocator);
@@ -61,8 +63,9 @@ pub fn runTask(
     std.debug.print("\x1b[0m\n", .{});
 
     var child = std.process.Child.init(argv.items, allocator);
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
+    const should_show_output = cfg.verbose;
+    child.stdout_behavior = if (should_show_output) .Inherit else .Ignore;
+    child.stderr_behavior = if (should_show_output) .Inherit else .Ignore;
 
     const term = try child.spawnAndWait();
     if (term != .Exited or term.Exited != 0) return error.TaskFailed;

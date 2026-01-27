@@ -3,6 +3,7 @@ const utils = @import("utils.zig");
 const detect = @import("detect.zig");
 const output = @import("output.zig");
 const runner = @import("runner.zig");
+const config = @import("config.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -17,6 +18,10 @@ pub fn main() !void {
         output.printHelp();
         return;
     }
+
+    const cfg = config.Config{
+        .verbose = utils.hasArg(args, "--verbose"),
+    };
 
     const orch = detect.detectOrchestrator();
     const mgr = detect.detectManager();
@@ -51,7 +56,7 @@ pub fn main() !void {
     for (tasks) |task| {
         const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
         if (match) {
-            runner.runTask(allocator, mgr, orch, task.name, is_affected, base_ref) catch |err| {
+            runner.runTask(allocator, mgr, orch, task.name, is_affected, base_ref, cfg) catch |err| {
                 had_error = true;
                 std.debug.print("\x1b[31m✗ Error running task '{s}': {}\x1b[0m\n\n", .{ task.name, err });
             };
