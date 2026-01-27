@@ -24,7 +24,14 @@ pub fn main() !void {
 
     const is_affected = hasArg(args, "--affected");
 
-    // Validate affected flag
+    // Determine Base Reference (Priority: --base flag > FASTTRACK_BASE env > origin/main)
+    const base_from_arg = getArgValue(args, "--base=");
+    const base_from_env = std.process.getEnvVarOwned(allocator, "FASTTRACK_BASE") catch null;
+    defer if (base_from_env) |env| allocator.free(env);
+
+    const base_ref = base_from_arg orelse (base_from_env orelse "origin/main");
+    std.debug.print("\x1b[34m🎯 Base Ref: {s}\x1b[0m\n\n", .{base_ref});
+
     if (is_affected and orch == .none) {
         std.debug.print("\x1b[33m⚠️  Warning: --affected flag requires nx or turbo\x1b[0m\n", .{});
     }
@@ -32,7 +39,6 @@ pub fn main() !void {
     var ran_something = false;
     var had_error = false;
 
-    // Define tasks in order of execution
     const tasks = [_]struct { flag: []const u8, alt_flag: ?[]const u8, name: []const u8 }{
         .{ .flag = "--format", .alt_flag = "--prettier", .name = "format" },
         .{ .flag = "--lint", .alt_flag = null, .name = "lint" },
@@ -44,10 +50,9 @@ pub fn main() !void {
     for (tasks) |task| {
         const match = hasArg(args, task.flag) or (task.alt_flag != null and hasArg(args, task.alt_flag.?));
         if (match) {
-            runTask(allocator, mgr, orch, task.name, is_affected) catch |err| {
+            runTask(allocator, mgr, orch, task.name, is_affected, base_ref) catch |err| {
                 had_error = true;
                 std.debug.print("\x1b[31m✗ Error running task '{s}': {}\x1b[0m\n\n", .{ task.name, err });
-                // Continue to next task instead of failing immediately
             };
             ran_something = true;
         }
@@ -70,10 +75,10 @@ fn printHelp() void {
         \\  --lint         Run linting
         \\  --test         Run tests
         \\  --format       Run formatter (Prettier)
-        \\  --prettier     Alias for --format
         \\  --build        Run build
         \\  --typecheck    Run type checking
-        \\  --affected     Only run on affected projects (requires nx/turbo)
+        \\  --affected     Only run on affected projects
+        \\  --base=<ref>   Base git ref for --affected (default: origin/main)
         \\  --help, -h     Show this help
         \\
         \\Examples:
@@ -85,20 +90,17 @@ fn printHelp() void {
 }
 
 fn detectOrchestrator() Orchestrator {
-    // Priority: nx > turbo > bun > none
     if (fileExists("nx.json")) return .nx;
     if (fileExists("turbo.json")) return .turbo;
-    if (fileExists("bunfig.toml")) return .bun; // Bun workspaces
+    if (fileExists("bunfig.toml")) return .bun;
     return .none;
 }
 
 fn detectManager() Manager {
-    // Priority: pnpm > yarn > bun > npm
     if (fileExists("pnpm-lock.yaml")) return .pnpm;
     if (fileExists("yarn.lock")) return .yarn;
     if (fileExists("bun.lock") or fileExists("bun.lockb")) return .bun;
-    if (fileExists("package-lock.json")) return .npm;
-    return .npm; // Default fallback
+    return .npm;
 }
 
 fn runTask(
@@ -107,21 +109,32 @@ fn runTask(
     orch: Orchestrator,
     target: []const u8,
     affected: bool,
+    base_ref: []const u8,
 ) !void {
     var argv = std.ArrayListUnmanaged([]const u8){};
     defer argv.deinit(allocator);
 
-    // Base command
     try argv.append(allocator, @tagName(mgr));
 
-    // Orchestrator-specific logic
+    // Detect if we are currently ON the base branch (main/master)
+    const current_branch = std.process.getEnvVarOwned(allocator, "GITHUB_REF_NAME") catch "";
+    defer if (current_branch.len > 0) allocator.free(current_branch);
+
+    // Smart detection: if base is origin/main and current is main, use HEAD~1
+    const is_on_base = (std.mem.endsWith(u8, base_ref, current_branch) and current_branch.len > 0) or
+        (std.mem.eql(u8, current_branch, "main") and std.mem.eql(u8, base_ref, "origin/master"));
+
     switch (orch) {
         .nx => {
             try argv.append(allocator, "nx");
             try argv.append(allocator, if (affected) "affected" else "run-many");
             try argv.append(allocator, "-t");
             try argv.append(allocator, target);
-            if (!affected) {
+            if (affected) {
+                const base = if (is_on_base) "HEAD~1" else base_ref;
+                const base_arg = try std.fmt.allocPrint(allocator, "--base={s}", .{base});
+                try argv.append(allocator, base_arg);
+            } else {
                 try argv.append(allocator, "--all");
             }
         },
@@ -130,50 +143,31 @@ fn runTask(
             try argv.append(allocator, "run");
             try argv.append(allocator, target);
             if (affected) {
-                try argv.append(allocator, "--filter=[origin/main...HEAD]");
+                const diff = if (is_on_base) "HEAD~1...HEAD" else try std.fmt.allocPrint(allocator, "{s}...HEAD", .{base_ref});
+                const filter = try std.fmt.allocPrint(allocator, "--filter=[{s}]", .{diff});
+                try argv.append(allocator, filter);
             }
         },
-        .bun => {
-            try argv.append(allocator, "run");
-            try argv.append(allocator, target);
-            // Note: bun doesn't support filtering like nx/turbo
-            // --affected flag is ignored for bun
-        },
-        .none => {
+        else => {
             try argv.append(allocator, "run");
             try argv.append(allocator, target);
         },
     }
 
-    // Print command
+    // Print and Execute
     std.debug.print("\x1b[36m» Running: ", .{});
     for (argv.items, 0..) |arg, i| {
-        if (i > 0) std.debug.print(" ", .{});
-        std.debug.print("{s}", .{arg});
+        std.debug.print("{s}{s}", .{ if (i > 0) " " else "", arg });
     }
     std.debug.print("\x1b[0m\n", .{});
 
-    // Run command
     var child = std.process.Child.init(argv.items, allocator);
     child.stdout_behavior = .Inherit;
     child.stderr_behavior = .Inherit;
 
     const term = try child.spawnAndWait();
-
-    // Check exit code
-    switch (term) {
-        .Exited => |code| {
-            if (code != 0) {
-                std.debug.print("\x1b[31m✗ Task '{s}' failed with code {d}\x1b[0m\n", .{ target, code });
-                return error.TaskFailed;
-            }
-            std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
-        },
-        else => {
-            std.debug.print("\x1b[31m✗ Task '{s}' terminated abnormally\x1b[0m\n", .{target});
-            return error.TaskFailed;
-        },
-    }
+    if (term != .Exited or term.Exited != 0) return error.TaskFailed;
+    std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
 }
 
 fn fileExists(path: []const u8) bool {
@@ -182,8 +176,16 @@ fn fileExists(path: []const u8) bool {
 }
 
 fn hasArg(args: []const []const u8, target: []const u8) bool {
-    for (args) |arg| {
-        if (std.mem.eql(u8, arg, target)) return true;
-    }
+    for (args) |arg| if (std.mem.eql(u8, arg, target)) return true;
     return false;
+}
+
+fn getArgValue(args: []const []const u8, prefix: []const u8) ?[]const u8 {
+    for (args) |arg| {
+        if (std.mem.startsWith(u8, arg, prefix)) {
+            const split_idx = std.mem.indexOf(u8, arg, "=") orelse continue;
+            return arg[split_idx + 1 ..];
+        }
+    }
+    return null;
 }
