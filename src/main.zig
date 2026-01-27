@@ -1,4 +1,5 @@
 const std = @import("std");
+const utils = @import("utils.zig");
 
 const Orchestrator = enum { nx, turbo, bun, none };
 const Manager = enum { pnpm, bun, npm, yarn };
@@ -13,7 +14,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     // Show help if no args or --help
-    if (args.len < 2 or hasArg(args, "--help") or hasArg(args, "-h")) {
+    if (args.len < 2 or utils.hasArg(args, "--help") or utils.hasArg(args, "-h")) {
         printHelp();
         return;
     }
@@ -23,10 +24,10 @@ pub fn main() !void {
 
     std.debug.print("\x1b[34m🔍 Detected: {s} + {s}\x1b[0m\n\n", .{ @tagName(mgr), @tagName(orch) });
 
-    const is_affected = hasArg(args, "--affected");
+    const is_affected = utils.hasArg(args, "--affected");
 
     // Determine Base Reference (Priority: --base flag > FASTTRACK_BASE env > origin/main)
-    const base_from_arg = getArgValue(args, "--base=");
+    const base_from_arg = utils.getArgValue(args, "--base=");
     const base_from_env = std.process.getEnvVarOwned(allocator, "FASTTRACK_BASE") catch null;
     defer if (base_from_env) |env| allocator.free(env);
 
@@ -49,7 +50,7 @@ pub fn main() !void {
     };
 
     for (tasks) |task| {
-        const match = hasArg(args, task.flag) or (task.alt_flag != null and hasArg(args, task.alt_flag.?));
+        const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
         if (match) {
             runTask(allocator, mgr, orch, task.name, is_affected, base_ref) catch |err| {
                 had_error = true;
@@ -97,16 +98,16 @@ fn printHelp() void {
 }
 
 fn detectOrchestrator() Orchestrator {
-    if (fileExists("nx.json")) return .nx;
-    if (fileExists("turbo.json")) return .turbo;
-    if (fileExists("bunfig.toml")) return .bun;
+    if (utils.fileExists("nx.json")) return .nx;
+    if (utils.fileExists("turbo.json")) return .turbo;
+    if (utils.fileExists("bunfig.toml")) return .bun;
     return .none;
 }
 
 fn detectManager() Manager {
-    if (fileExists("pnpm-lock.yaml")) return .pnpm;
-    if (fileExists("yarn.lock")) return .yarn;
-    if (fileExists("bun.lock") or fileExists("bun.lockb")) return .bun;
+    if (utils.fileExists("pnpm-lock.yaml")) return .pnpm;
+    if (utils.fileExists("yarn.lock")) return .yarn;
+    if (utils.fileExists("bun.lock") or utils.fileExists("bun.lockb")) return .bun;
     return .npm;
 }
 
@@ -205,24 +206,4 @@ fn runTask(
     const term = try child.spawnAndWait();
     if (term != .Exited or term.Exited != 0) return error.TaskFailed;
     std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
-}
-
-fn fileExists(path: []const u8) bool {
-    std.fs.cwd().access(path, .{}) catch return false;
-    return true;
-}
-
-fn hasArg(args: []const []const u8, target: []const u8) bool {
-    for (args) |arg| if (std.mem.eql(u8, arg, target)) return true;
-    return false;
-}
-
-fn getArgValue(args: []const []const u8, prefix: []const u8) ?[]const u8 {
-    for (args) |arg| {
-        if (std.mem.startsWith(u8, arg, prefix)) {
-            const split_idx = std.mem.indexOf(u8, arg, "=") orelse continue;
-            return arg[split_idx + 1 ..];
-        }
-    }
-    return null;
 }
