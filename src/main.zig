@@ -1,6 +1,7 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 const detect = @import("detect.zig");
+const output = @import("output.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,7 +13,7 @@ pub fn main() !void {
 
     // Show help if no args or --help
     if (args.len < 2 or utils.hasArg(args, "--help") or utils.hasArg(args, "-h")) {
-        printHelp();
+        output.printHelp();
         return;
     }
 
@@ -62,36 +63,6 @@ pub fn main() !void {
     } else if (had_error) {
         std.process.exit(1);
     }
-}
-
-fn printHelp() void {
-    std.debug.print(
-        \\fasttrack - task runner
-        \\
-        \\Usage: fasttrack [options]
-        \\
-        \\Options:
-        \\  --lint         Run linting
-        \\  --test         Run tests
-        \\  --format       Run formatter (Prettier)
-        \\  --build        Run build
-        \\  --typecheck    Run type checking
-        \\  --affected     Only run on affected projects
-        \\  --base=<ref>   Base git ref for --affected (default: origin/main)
-        \\  --help, -h     Show this help
-        \\
-        \\Supported CI Runners:
-        \\  • GitHub Actions (GITHUB_REF_NAME)
-        \\  • GitLab CI (CI_COMMIT_REF_NAME)
-        \\  • Bitbucket Pipelines (BITBUCKET_BRANCH)
-        \\  • Generic (GIT_BRANCH)
-        \\
-        \\Examples:
-        \\  fasttrack --lint --test
-        \\  fasttrack --lint --affected
-        \\  fasttrack --format --lint --test --build
-        \\
-    , .{});
 }
 
 fn runTask(
