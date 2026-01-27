@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Orchestrator = enum { nx, turbo, bun, none };
 const Manager = enum { pnpm, bun, npm, yarn };
+const CIRunner = enum { github, gitlab, bitbucket, generic };
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -81,6 +82,12 @@ fn printHelp() void {
         \\  --base=<ref>   Base git ref for --affected (default: origin/main)
         \\  --help, -h     Show this help
         \\
+        \\Supported CI Runners:
+        \\  • GitHub Actions (GITHUB_REF_NAME)
+        \\  • GitLab CI (CI_COMMIT_REF_NAME)
+        \\  • Bitbucket Pipelines (BITBUCKET_BRANCH)
+        \\  • Generic (GIT_BRANCH)
+        \\
         \\Examples:
         \\  fasttrack --lint --test
         \\  fasttrack --lint --affected
@@ -103,6 +110,35 @@ fn detectManager() Manager {
     return .npm;
 }
 
+fn detectCIRunner() CIRunner {
+    // Check for GitHub Actions
+    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "GITHUB_ACTIONS") catch null;
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "GITHUB_ACTIONS") catch null != null) {
+        return .github;
+    }
+    // Check for GitLab CI
+    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "GITLAB_CI") catch null;
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "GITLAB_CI") catch null != null) {
+        return .gitlab;
+    }
+    // Check for Bitbucket Pipelines
+    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "BITBUCKET_BUILD_NUMBER") catch null;
+    if (std.process.getEnvVarOwned(std.heap.page_allocator, "BITBUCKET_BUILD_NUMBER") catch null != null) {
+        return .bitbucket;
+    }
+    return .generic;
+}
+
+fn getCurrentBranch(allocator: std.mem.Allocator, runner: CIRunner) ?[]const u8 {
+    const env_var = switch (runner) {
+        .github => "GITHUB_REF_NAME",
+        .gitlab => "CI_COMMIT_REF_NAME",
+        .bitbucket => "BITBUCKET_BRANCH",
+        .generic => "GIT_BRANCH",
+    };
+    return std.process.getEnvVarOwned(allocator, env_var) catch null;
+}
+
 fn runTask(
     allocator: std.mem.Allocator,
     mgr: Manager,
@@ -116,8 +152,9 @@ fn runTask(
 
     try argv.append(allocator, @tagName(mgr));
 
-    // Detect if we are currently ON the base branch (main/master)
-    const current_branch = std.process.getEnvVarOwned(allocator, "GITHUB_REF_NAME") catch "";
+    // Detect CI runner and get current branch
+    const runner = detectCIRunner();
+    const current_branch = getCurrentBranch(allocator, runner) orelse "";
     defer if (current_branch.len > 0) allocator.free(current_branch);
 
     // Smart detection: if base is origin/main and current is main, use HEAD~1
