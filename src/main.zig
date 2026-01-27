@@ -31,12 +31,8 @@ pub fn main() !void {
 
     const is_affected = utils.hasArg(args, "--affected");
 
-    // Determine Base Reference (Priority: --base flag > FASTTRACK_BASE env > origin/main)
-    const base_from_arg = utils.getArgValue(args, "--base=");
-    const base_from_env = std.process.getEnvVarOwned(allocator, "FASTTRACK_BASE") catch null;
-    defer if (base_from_env) |env| allocator.free(env);
-
-    const base_ref = base_from_arg orelse (base_from_env orelse "origin/main");
+    const base_ref = try detect.resolveBaseRef(allocator, args);
+    defer allocator.free(base_ref); // Handles all cases: arg, env, or default
     std.debug.print("\x1b[34m🎯 Base Ref: {s}\x1b[0m\n\n", .{base_ref});
 
     if (is_affected and orch == .none) {

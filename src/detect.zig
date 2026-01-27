@@ -43,3 +43,16 @@ pub fn getCurrentBranch(allocator: std.mem.Allocator, runner: CIRunner) ?[]const
     };
     return std.process.getEnvVarOwned(allocator, env_var) catch null;
 }
+
+// Determine Base Reference (Priority: --base flag > FASTTRACK_BASE env > origin/main)
+pub fn resolveBaseRef(allocator: std.mem.Allocator, args: []const []const u8) ![]const u8 {
+    if (utils.getArgValue(args, "--base=")) |val| {
+        return try allocator.dupe(u8, val);
+    }
+
+    if (std.process.getEnvVarOwned(allocator, "FASTTRACK_BASE")) |env_val| {
+        return env_val;
+    } else |_| {}
+
+    return try allocator.dupe(u8, "origin/main");
+}
