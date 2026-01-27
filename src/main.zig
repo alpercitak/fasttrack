@@ -21,6 +21,7 @@ pub fn main() !void {
 
     const cfg = config.Config{
         .verbose = utils.hasArg(args, "--verbose"),
+        .parallel = utils.hasArg(args, "--parallel"),
     };
 
     const orch = detect.detectOrchestrator();
@@ -53,14 +54,32 @@ pub fn main() !void {
         .{ .flag = "--build", .alt_flag = null, .name = "build" },
     };
 
-    for (tasks) |task| {
-        const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
-        if (match) {
-            runner.runTask(allocator, mgr, orch, task.name, is_affected, base_ref, cfg) catch |err| {
-                had_error = true;
-                std.debug.print("\x1b[31m✗ Error running task '{s}': {}\x1b[0m\n\n", .{ task.name, err });
-            };
-            ran_something = true;
+    if (cfg.parallel) {
+        var threads = std.ArrayList(std.Thread).empty;
+        defer threads.deinit(allocator);
+
+        for (tasks) |task| {
+            if (utils.hasArg(args, task.flag) or
+                (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?)))
+            {
+                const t = try std.Thread.spawn(.{}, runner.runTask, .{
+                    allocator, mgr, orch, task.name, is_affected, base_ref, cfg,
+                });
+                try threads.append(allocator, t);
+                ran_something = true;
+            }
+        }
+
+        for (threads.items) |t| t.join();
+    } else {
+        for (tasks) |task| {
+            const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
+            if (match) {
+                runner.runTask(allocator, mgr, orch, task.name, is_affected, base_ref, cfg) catch {
+                    had_error = true;
+                };
+                ran_something = true;
+            }
         }
     }
 

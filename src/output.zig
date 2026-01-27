@@ -16,6 +16,7 @@ pub fn printHelp() void {
         \\Options:
         \\  --affected     Only run on affected projects
         \\  --base=<ref>   Base git ref for --affected (default: origin/main)
+        \\  --parallel     Run tasks in parallel
         \\  --verbose      Show detailed output
         \\  --help, -h     Show this help
         \\
@@ -25,6 +26,7 @@ pub fn printHelp() void {
         \\Examples:
         \\  fasttrack --lint --test
         \\  fasttrack --lint --affected
+        \\  fasttrack --build --test --parallel --affected
         \\
     , .{});
 }
