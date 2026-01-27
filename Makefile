@@ -2,6 +2,8 @@ BINARY_NAME=fasttrack
 VERSION=$(shell cat VERSION)
 ZIG_FLAGS=-Doptimize=ReleaseSafe
 
+all: build test
+
 test:
 	zig test src/main.zig
 
@@ -12,4 +14,7 @@ clean:
 	rm -rf zig-out .zig-cache
 
 build:
-	 zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=fasttrack
+	 zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=fasttrack 
+
+bump:
+	echo $(VERSION) > VERSION
