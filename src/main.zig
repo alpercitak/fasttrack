@@ -1,9 +1,6 @@
 const std = @import("std");
 const utils = @import("utils.zig");
-
-const Orchestrator = enum { nx, turbo, bun, none };
-const Manager = enum { pnpm, bun, npm, yarn };
-const CIRunner = enum { github, gitlab, bitbucket, generic };
+const detect = @import("detect.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -19,8 +16,8 @@ pub fn main() !void {
         return;
     }
 
-    const orch = detectOrchestrator();
-    const mgr = detectManager();
+    const orch = detect.detectOrchestrator();
+    const mgr = detect.detectManager();
 
     std.debug.print("\x1b[34m🔍 Detected: {s} + {s}\x1b[0m\n\n", .{ @tagName(mgr), @tagName(orch) });
 
@@ -97,53 +94,10 @@ fn printHelp() void {
     , .{});
 }
 
-fn detectOrchestrator() Orchestrator {
-    if (utils.fileExists("nx.json")) return .nx;
-    if (utils.fileExists("turbo.json")) return .turbo;
-    if (utils.fileExists("bunfig.toml")) return .bun;
-    return .none;
-}
-
-fn detectManager() Manager {
-    if (utils.fileExists("pnpm-lock.yaml")) return .pnpm;
-    if (utils.fileExists("yarn.lock")) return .yarn;
-    if (utils.fileExists("bun.lock") or utils.fileExists("bun.lockb")) return .bun;
-    return .npm;
-}
-
-fn detectCIRunner() CIRunner {
-    // Check for GitHub Actions
-    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "GITHUB_ACTIONS") catch null;
-    if (std.process.getEnvVarOwned(std.heap.page_allocator, "GITHUB_ACTIONS") catch null != null) {
-        return .github;
-    }
-    // Check for GitLab CI
-    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "GITLAB_CI") catch null;
-    if (std.process.getEnvVarOwned(std.heap.page_allocator, "GITLAB_CI") catch null != null) {
-        return .gitlab;
-    }
-    // Check for Bitbucket Pipelines
-    _ = std.process.getEnvVarOwned(std.heap.page_allocator, "BITBUCKET_BUILD_NUMBER") catch null;
-    if (std.process.getEnvVarOwned(std.heap.page_allocator, "BITBUCKET_BUILD_NUMBER") catch null != null) {
-        return .bitbucket;
-    }
-    return .generic;
-}
-
-fn getCurrentBranch(allocator: std.mem.Allocator, runner: CIRunner) ?[]const u8 {
-    const env_var = switch (runner) {
-        .github => "GITHUB_REF_NAME",
-        .gitlab => "CI_COMMIT_REF_NAME",
-        .bitbucket => "BITBUCKET_BRANCH",
-        .generic => "GIT_BRANCH",
-    };
-    return std.process.getEnvVarOwned(allocator, env_var) catch null;
-}
-
 fn runTask(
     allocator: std.mem.Allocator,
-    mgr: Manager,
-    orch: Orchestrator,
+    mgr: detect.Manager,
+    orch: detect.Orchestrator,
     target: []const u8,
     affected: bool,
     base_ref: []const u8,
@@ -154,8 +108,8 @@ fn runTask(
     try argv.append(allocator, @tagName(mgr));
 
     // Detect CI runner and get current branch
-    const runner = detectCIRunner();
-    const current_branch = getCurrentBranch(allocator, runner) orelse "";
+    const runner = detect.detectCIRunner();
+    const current_branch = detect.getCurrentBranch(allocator, runner) orelse "";
     defer if (current_branch.len > 0) allocator.free(current_branch);
 
     // Smart detection: if base is origin/main and current is main, use HEAD~1
