@@ -11,3 +11,5 @@ dist/
 *.tar.gz
 .env
 .env.local
+zig-out/
+.zig-cache/
