@@ -37,7 +37,7 @@ jobs:
         run: ./fasttrack-x86_64-linux --help
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: fasttrack-${{ matrix.target }}
           path: fasttrack-${{ matrix.target }}
