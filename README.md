@@ -1,9 +1,9 @@
 # fasttrack
 
-![Zig Version](https://img.shields.io/badge/zig-0.15.2-orange?style=flat-square&logo=zig&logoColor=white)
-![GitHub Release](https://img.shields.io/github/v/tag/alpercitak/fasttrack?include_prereleases&style=flat-square&color=orange&label=release)
-![Build](https://img.shields.io/github/actions/workflow/status/alpercitak/fasttrack/build-release.yaml?style=flat-square&label=build&color=4ade80)
-![License](https://img.shields.io/badge/license-MIT-4ade80?style=flat-square)
+![Zig](https://img.shields.io/badge/zig--0.15.2-000000?style=flat-square&logo=zig&logoColor=F7A41D)
+![Release](https://img.shields.io/github/v/tag/alpercitak/fasttrack?include_prereleases&style=flat-square&color=2ea44f&label=release)
+![Build](https://img.shields.io/github/actions/workflow/status/alpercitak/fasttrack/build-release.yaml?style=flat-square&label=&color=2ea44f)
+![License](https://img.shields.io/badge/MIT-2ea44f?style=flat-square)
 
 A blazingly fast monorepo task runner written in Zig. Automatically detects your package manager (pnpm, npm, yarn, bun) and orchestrator (nx, turbo, bun), providing a unified CLI for running tasks across your monorepo.
 
