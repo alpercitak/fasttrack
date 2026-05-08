@@ -101,7 +101,7 @@ jobs:
         with:
           fetch-depth: 0  # Required for --affected to work
 
-      - uses: alpercitak/fasttrack@v0.2.0
+      - uses: alpercitak/fasttrack@v0
         with:
           args: --lint --test --build --affected
 ```
