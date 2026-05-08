@@ -19,7 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64-linux, aarch64-linux, x86_64-macos, aarch64-macos]
+        target:
+          [
+            x86_64-linux,
+            aarch64-linux,
+            x86_64-macos,
+            aarch64-macos,
+            x86_64-windows,
+          ]
 
     steps:
       - uses: actions/checkout@v6
@@ -28,12 +35,15 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      - run: |
+      - name: Build Binary
+        run: |
+          EXT=$([[ "${{ matrix.target }}" == *"windows"* ]] && echo ".exe" || echo "")
+
           zig build-exe src/main.zig \
             -O ReleaseSmall \
             -target ${{ matrix.target }} \
             -fstrip \
-            -femit-bin=fasttrack-${{ matrix.target }}
+            -femit-bin=fasttrack-${{ matrix.target }}$EXT
 
       - name: Test (Native Only)
         if: matrix.target == 'x86_64-linux'
@@ -43,7 +53,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: fasttrack-${{ matrix.target }}
-          path: fasttrack-${{ matrix.target }}
+          path: fasttrack-${{ matrix.target }}*
 
   create-release:
     name: Create Release
@@ -79,8 +89,11 @@ jobs:
           generate_release_notes: true
           body: |
             ### Installation
-            Download the binary for your platform and move it to your bin folder:
+            **Linux / macOS:**
             `chmod +x fasttrack-<target> && mv fasttrack-<target> /usr/local/bin/fasttrack`
+
+            **Windows:**
+            Download the `.exe`, rename to `fasttrack.exe`, and add it to your PATH.
 
       - name: Update v0 moving tag
         run: |
