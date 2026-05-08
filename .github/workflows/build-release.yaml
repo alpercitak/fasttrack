@@ -53,6 +53,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -79,6 +81,13 @@ jobs:
             ### Installation
             Download the binary for your platform and move it to your bin folder:
             `chmod +x fasttrack-<target> && mv fasttrack-<target> /usr/local/bin/fasttrack`
+
+      - name: Update v0 moving tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f v0
+          git push origin v0 --force
 
   lint:
     runs-on: ubuntu-latest
