@@ -1,6 +1,7 @@
 BINARY_NAME=fasttrack
 VERSION=$(shell cat VERSION)
-ZIG_FLAGS=-Doptimize=ReleaseSafe
+
+.PHONY: all test lint clean build bump
 
 all: build test
 
@@ -14,7 +15,7 @@ clean:
 	rm -rf zig-out .zig-cache
 
 build:
-	 zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=fasttrack 
+	zig build-exe src/main.zig -O ReleaseSmall -fstrip -femit-bin=$(BINARY_NAME)
 
 # Bump version (make bump VERSION=v0.2.3)
 bump:

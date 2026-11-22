@@ -146,3 +146,10 @@ fn runTaskInThread(
 ) void {
     runner.runTask(allocator, mgr, orch, target, affected_base, cfg) catch failed.store(true, .monotonic);
 }
+
+test {
+    std.testing.refAllDecls(@This());
+    _ = utils;
+    _ = detect;
+    _ = runner;
+}
