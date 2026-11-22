@@ -20,7 +20,7 @@ A blazingly fast monorepo task runner written in Zig. Automatically detects your
 
 ### Build from Source
 
-Requires [Zig](https://ziglang.org) 0.15.0+
+Requires [Zig](https://ziglang.org) 0.15.x
 
 ```bash
 git clone https://github.com/alpercitak/fasttrack
@@ -34,21 +34,34 @@ sudo mv fasttrack /usr/local/bin/
 ```bash
 fasttrack [options]
 
-Options:
+Tasks:
   --lint         Run linting
   --test         Run tests
-  --format       Run formatter (Prettier)
-  --prettier     Alias for --format
+  --format       Run formatter (alias: --prettier)
   --build        Run build
   --typecheck    Run type checking
+
+Options:
   --affected     Only run on affected projects (requires nx/turbo)
+  --base=<ref>   Base git ref for --affected (default: origin/main)
+  --parallel     Run tasks in parallel
+  --quiet        Hide task output (only show status lines)
+  --verbose      Show CI/branch detection details
   --help, -h     Show help message
+
+Environment Variables:
+  FASTTRACK_BASE    Override default base ref (--base takes precedence)
 
 Examples:
   fasttrack --lint --test                    # Run lint and test
   fasttrack --format --lint --test --build   # Run all checks sequentially
   fasttrack --lint --affected                # Lint only affected packages
+  fasttrack --lint --test --parallel         # Run lint and test at the same time
 ```
+
+Tasks always run in the fixed order format → lint → typecheck → test → build. A failing task does not stop the
+following ones, but fasttrack exits with code `1` if any task failed. Unknown options or no task at all exit with
+code `2`.
 
 ## Integration with Monorepos
 
@@ -81,7 +94,7 @@ fasttrack --build --affected
 # Works just as well
 fasttrack --test --build
 
-# Runs: pnpm run test && pnpm run build
+# Runs: pnpm run test, then pnpm run build
 ```
 
 ## GitHub Actions Integration
@@ -97,7 +110,7 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Required for --affected to work
 
@@ -106,19 +119,33 @@ jobs:
           args: --lint --test --build --affected
 ```
 
+`@v0` resolves to the newest `v0.x.y` release. Pin an exact release (e.g. `@v0.2.2`) for fully reproducible builds.
+
+When running on the base branch itself (e.g. a push to `main`), `--affected` compares against `HEAD~1`, which only
+covers the last commit. To cover every commit in a push, pass the previous head explicitly:
+
+```yaml
+      - uses: alpercitak/fasttrack@v0
+        with:
+          args: --test --affected --base=${{ github.event.before }}
+```
+
 ## How It Works
 
 1. **Auto-detection**: fasttrack checks for `nx.json`, `turbo.json`, and lock files
 2. **Command generation**: Based on detected tools, generates appropriate commands
-3. **Execution**: Runs the generated command with inherited stdout/stderr
-4. **Error handling**: Reports failures with proper exit codes
+3. **Execution**: Runs the generated command with inherited stdout/stderr (use `--quiet` to hide it)
+4. **Error handling**: Reports why each task failed and exits non-zero
 
 ### Command Mapping
 
-| Input | nx | turbo | bun | none |
-|-------|----|----|-----|------|
-| `--lint` | `nx run-many -t lint --all` | `turbo run lint` | `bun run lint` | `pnpm run lint` |
-| `--lint --affected` | `nx affected -t lint` | `turbo run lint --filter=[origin/main...HEAD]` | (not applicable) | (not applicable) |
+| Input | nx | turbo | bun / none |
+|-------|----|-------|------------|
+| `--lint` | `<exec> nx run-many -t lint --all` | `<exec> turbo run lint` | `<manager> run lint` |
+| `--lint --affected` | `<exec> nx affected -t lint --base=origin/main` | `<exec> turbo run lint --filter=[origin/main...HEAD]` | (not applicable) |
+
+`<exec>` is `pnpm`, `yarn`, `npx` or `bunx` depending on the detected package manager (from `pnpm-lock.yaml`,
+`yarn.lock`, `bun.lock`/`bun.lockb`, otherwise npm).
 
 ## Performance
 
@@ -138,12 +165,14 @@ MIT
 
 Ensure your repository:
 1. Has commits (not a fresh repo)
-2. Has `origin/main` branch (or adjust the branch in the source)
-3. Is on a different branch than `origin/main`
+2. Has the base ref available locally (`origin/main` by default; change it with `--base=<ref>` or `FASTTRACK_BASE`)
+3. Was checked out with enough history (`fetch-depth: 0` in `actions/checkout`)
+
+Run with `--verbose` to see the detected CI, branch and base ref.
 
 ### Command not executing properly
 
-Run with the generated command visible (it's printed in cyan) and verify it's correct for your monorepo setup.
+The generated command is printed in cyan before it runs; verify it's correct for your monorepo setup.
 
 ### Permission denied
 
