@@ -29,6 +29,18 @@ pub fn main() !void {
         return;
     }
 
+    if (findUnknownArg(args[1..])) |arg| {
+        std.debug.print("\x1b[31m✗ Unknown option: {s}\x1b[0m\nUse --help for usage.\n", .{arg});
+        std.process.exit(2);
+    }
+
+    for (tasks) |task| {
+        if (isSelected(args, task)) break;
+    } else {
+        std.debug.print("\x1b[31m✗ No tasks specified. Use --help for usage.\x1b[0m\n", .{});
+        std.process.exit(2);
+    }
+
     const cfg = config.Config{
         .verbose = utils.hasArg(args, "--verbose"),
         .quiet = utils.hasArg(args, "--quiet"),
@@ -65,7 +77,6 @@ pub fn main() !void {
         std.debug.print("\x1b[34m🎯 Affected since: {s}\x1b[0m\n\n", .{base});
     }
 
-    var ran_something = false;
     var had_error = false;
 
     if (cfg.parallel) {
@@ -79,7 +90,6 @@ pub fn main() !void {
                     &failed, allocator, mgr, orch, task.name, affected_base, cfg,
                 });
                 try threads.append(allocator, t);
-                ran_something = true;
             }
         }
 
@@ -91,16 +101,32 @@ pub fn main() !void {
                 runner.runTask(allocator, mgr, orch, task.name, affected_base, cfg) catch {
                     had_error = true;
                 };
-                ran_something = true;
             }
         }
     }
 
-    if (!ran_something) {
-        std.debug.print("\x1b[33m⚠️  No tasks specified. Use --help for usage.\x1b[0m\n", .{});
-    } else if (had_error) {
-        std.process.exit(1);
+    if (had_error) std.process.exit(1);
+}
+
+const options = [_][]const u8{ "--affected", "--parallel", "--verbose", "--quiet", "--help", "-h" };
+
+fn findUnknownArg(args: []const []const u8) ?[]const u8 {
+    outer: for (args) |arg| {
+        if (std.mem.startsWith(u8, arg, "--base=")) continue;
+        for (options) |opt| if (std.mem.eql(u8, arg, opt)) continue :outer;
+        for (tasks) |task| {
+            if (std.mem.eql(u8, arg, task.flag)) continue :outer;
+            if (task.alt_flag) |alt| if (std.mem.eql(u8, arg, alt)) continue :outer;
+        }
+        return arg;
     }
+    return null;
+}
+
+test "findUnknownArg" {
+    try std.testing.expectEqual(null, findUnknownArg(&.{ "--lint", "--prettier", "--affected", "--base=origin/dev" }));
+    try std.testing.expectEqualStrings("--tset", findUnknownArg(&.{ "--lint", "--tset" }).?);
+    try std.testing.expectEqualStrings("--base", findUnknownArg(&.{"--base"}).?);
 }
 
 fn isSelected(args: []const []const u8, task: Task) bool {
