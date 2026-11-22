@@ -33,8 +33,17 @@ runs:
         VERSION="${{ github.action_ref }}"
         if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
           echo "Looking for newest available release..."
-          # Using quotes and explicit flags to prevent command-line shifting
-          VERSION=$(gh release list --repo "$ACTION_REPO" --limit 1 --json tagName --jq '.[0].tagName')
+          VERSION=$(gh release view --repo "$ACTION_REPO" --json tagName --jq '.tagName')
+        elif [[ "$VERSION" =~ ^v[0-9]+$ ]]; then
+          # Moving major tag (e.g. v0) has no release of its own: resolve to the newest vX.Y.Z release
+          MAJOR="$VERSION"
+          VERSION=$(gh release list --repo "$ACTION_REPO" --limit 100 --json tagName --jq '.[].tagName' \
+            | grep -E "^${MAJOR}\.[0-9]+\.[0-9]+$" | head -n 1 || true)
+          if [ -z "$VERSION" ]; then
+            echo "::error::No release found for major version ${MAJOR}"
+            exit 1
+          fi
+          echo "Resolved ${MAJOR} to ${VERSION}"
         fi
 
         # 4. Export for other steps
@@ -42,6 +51,7 @@ runs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "target_path=${{ github.action_path }}/fasttrack-$ARCH-$OS$EXT" >> $GITHUB_OUTPUT
         echo "os=$OS" >> $GITHUB_OUTPUT
+        echo "arch=$ARCH" >> $GITHUB_OUTPUT
         echo "repo=$ACTION_REPO" >> $GITHUB_OUTPUT
 
     - name: Cache fasttrack binary
@@ -49,7 +59,7 @@ runs:
       uses: actions/cache@v5
       with:
         path: ${{ steps.vars.outputs.target_path }}
-        key: fasttrack-${{ steps.vars.outputs.os }}-${{ steps.vars.outputs.version }}
+        key: fasttrack-${{ steps.vars.outputs.os }}-${{ steps.vars.outputs.arch }}-${{ steps.vars.outputs.version }}
 
     - name: Download fasttrack
       if: steps.cache-fasttrack.outputs.cache-hit != 'true'
@@ -73,5 +83,10 @@ runs:
 
     - name: Run fasttrack
       shell: bash
+      env:
+        FASTTRACK_BIN: ${{ steps.vars.outputs.target_path }}
+        FASTTRACK_ARGS: ${{ inputs.args }}
       run: |
-        "${{ steps.vars.outputs.target_path }}" ${{ inputs.args }}
+        # Args come from an env var so they are never evaluated as shell code; word-splitting is intended
+        # shellcheck disable=SC2086
+        "$FASTTRACK_BIN" $FASTTRACK_ARGS
