@@ -14,8 +14,6 @@ pub fn runTask(
     var argv = std.ArrayListUnmanaged([]const u8){};
     defer argv.deinit(allocator);
 
-    try argv.append(allocator, @tagName(mgr));
-
     // Detect CI runner and get current branch
     const runner = detect.detectCIRunner();
     const current_branch = detect.getCurrentBranch(allocator, runner) orelse "";
@@ -27,6 +25,7 @@ pub fn runTask(
 
     switch (orch) {
         .nx => {
+            try argv.append(allocator, execCommand(mgr));
             try argv.append(allocator, "nx");
             try argv.append(allocator, if (affected) "affected" else "run-many");
             try argv.append(allocator, "-t");
@@ -40,6 +39,7 @@ pub fn runTask(
             }
         },
         .turbo => {
+            try argv.append(allocator, execCommand(mgr));
             try argv.append(allocator, "turbo");
             try argv.append(allocator, "run");
             try argv.append(allocator, target);
@@ -50,6 +50,7 @@ pub fn runTask(
             }
         },
         else => {
+            try argv.append(allocator, @tagName(mgr));
             try argv.append(allocator, "run");
             try argv.append(allocator, target);
         },
@@ -70,4 +71,15 @@ pub fn runTask(
     const term = try child.spawnAndWait();
     if (term != .Exited or term.Exited != 0) return error.TaskFailed;
     std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
+}
+
+/// Command that runs a binary from local node_modules for the given package manager.
+/// `npm nx ...` is not valid, npm needs `npx`; pnpm and yarn resolve bins directly.
+fn execCommand(mgr: detect.Manager) []const u8 {
+    return switch (mgr) {
+        .npm => "npx",
+        .bun => "bunx",
+        .pnpm => "pnpm",
+        .yarn => "yarn",
+    };
 }
