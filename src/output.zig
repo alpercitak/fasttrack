@@ -17,7 +17,8 @@ pub fn printHelp() void {
         \\  --affected     Only run on affected projects
         \\  --base=<ref>   Base git ref for --affected (default: origin/main)
         \\  --parallel     Run tasks in parallel
-        \\  --verbose      Show detailed output
+        \\  --quiet        Hide task output (only show status lines)
+        \\  --verbose      Show CI/branch detection details
         \\  --help, -h     Show this help
         \\
         \\Environment Variables:

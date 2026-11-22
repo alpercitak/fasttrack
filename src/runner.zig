@@ -64,13 +64,23 @@ pub fn runTask(
     std.debug.print("\x1b[0m\n", .{});
 
     var child = std.process.Child.init(argv.items, allocator);
-    const should_show_output = cfg.verbose;
-    child.stdout_behavior = if (should_show_output) .Inherit else .Ignore;
-    child.stderr_behavior = if (should_show_output) .Inherit else .Ignore;
+    child.stdout_behavior = if (cfg.quiet) .Ignore else .Inherit;
+    child.stderr_behavior = if (cfg.quiet) .Ignore else .Inherit;
 
-    const term = try child.spawnAndWait();
-    if (term != .Exited or term.Exited != 0) return error.TaskFailed;
-    std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
+    const term = child.spawnAndWait() catch |err| {
+        std.debug.print("\x1b[31m✗ Task '{s}' could not start '{s}': {s}\x1b[0m\n\n", .{ target, argv.items[0], @errorName(err) });
+        return error.TaskFailed;
+    };
+    switch (term) {
+        .Exited => |code| if (code == 0) {
+            std.debug.print("\x1b[32m✓ Task '{s}' completed\x1b[0m\n\n", .{target});
+            return;
+        } else {
+            std.debug.print("\x1b[31m✗ Task '{s}' failed (exit code {d})\x1b[0m\n\n", .{ target, code });
+        },
+        else => std.debug.print("\x1b[31m✗ Task '{s}' terminated abnormally\x1b[0m\n\n", .{target}),
+    }
+    return error.TaskFailed;
 }
 
 /// Command that runs a binary from local node_modules for the given package manager.

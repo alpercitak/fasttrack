@@ -1,3 +1,5 @@
-const std = @import("std");
-
-pub const Config = struct { verbose: bool = false, parallel: bool = false };
+pub const Config = struct {
+    verbose: bool = false,
+    quiet: bool = false,
+    parallel: bool = false,
+};

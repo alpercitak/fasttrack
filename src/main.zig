@@ -21,6 +21,7 @@ pub fn main() !void {
 
     const cfg = config.Config{
         .verbose = utils.hasArg(args, "--verbose"),
+        .quiet = utils.hasArg(args, "--quiet"),
         .parallel = utils.hasArg(args, "--parallel"),
     };
 
