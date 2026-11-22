@@ -6,6 +6,10 @@ inputs:
   args:
     description: "Arguments to pass to fasttrack"
     required: true
+  version:
+    description: "Release to use, e.g. v0.2.3, or v0 for the newest v0.x.y. Defaults to the ref the action is used at."
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -15,6 +19,7 @@ runs:
       id: vars
       env:
         GH_TOKEN: ${{ github.token }}
+        REQUESTED_VERSION: ${{ inputs.version }}
       run: |
         # 1. Normalize OS and Arch
         OS=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
@@ -30,7 +35,8 @@ runs:
         if [ -z "$ACTION_REPO" ]; then ACTION_REPO="alpercitak/fasttrack"; fi
 
         # 3. Determine the version
-        VERSION="${{ github.action_ref }}"
+        VERSION="$REQUESTED_VERSION"
+        if [ -z "$VERSION" ]; then VERSION="${{ github.action_ref }}"; fi
         if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
           echo "Looking for newest available release..."
           VERSION=$(gh release view --repo "$ACTION_REPO" --json tagName --jq '.tagName')
