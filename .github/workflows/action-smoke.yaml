@@ -1,0 +1,54 @@
+name: action smoke test
+
+on:
+  push:
+    paths: [action.yaml, .github/workflows/action-smoke.yaml]
+  pull_request:
+    branches: [main]
+    paths: [action.yaml, .github/workflows/action-smoke.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.os }} (${{ matrix.version || 'latest' }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # "" exercises the default (newest release), v0 the moving-major-tag resolution
+        version: ["", v0]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create fixture project
+        shell: bash
+        run: |
+          cat > package.json <<'JSON'
+          { "name": "fixture", "private": true, "scripts": { "lint": "echo lint ok", "test": "exit 1" } }
+          JSON
+
+      - name: Passing task exits 0
+        uses: ./
+        with:
+          version: ${{ matrix.version }}
+          args: --lint
+
+      - name: Failing task
+        id: failing
+        continue-on-error: true
+        uses: ./
+        with:
+          version: ${{ matrix.version }}
+          args: --test
+
+      - name: Failing task exits non-zero
+        if: steps.failing.outcome != 'failure'
+        shell: bash
+        run: |
+          echo "::error::expected 'fasttrack --test' to fail, outcome was '${{ steps.failing.outcome }}'"
+          exit 1
