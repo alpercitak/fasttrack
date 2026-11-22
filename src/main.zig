@@ -5,6 +5,16 @@ const output = @import("output.zig");
 const runner = @import("runner.zig");
 const config = @import("config.zig");
 
+const Task = struct { flag: []const u8, alt_flag: ?[]const u8 = null, name: []const u8 };
+
+const tasks = [_]Task{
+    .{ .flag = "--format", .alt_flag = "--prettier", .name = "format" },
+    .{ .flag = "--lint", .name = "lint" },
+    .{ .flag = "--typecheck", .name = "typecheck" },
+    .{ .flag = "--test", .name = "test" },
+    .{ .flag = "--build", .name = "build" },
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -31,25 +41,32 @@ pub fn main() !void {
     std.debug.print("\x1b[34m🔍 Detected: {s} + {s}\x1b[0m\n\n", .{ @tagName(mgr), @tagName(orch) });
 
     const is_affected = utils.hasArg(args, "--affected");
+    if (is_affected and orch != .nx and orch != .turbo) {
+        std.debug.print("\x1b[33m⚠️  Warning: --affected requires nx or turbo, running on everything\x1b[0m\n\n", .{});
+    }
 
     const base_ref = try detect.resolveBaseRef(allocator, args);
-    defer allocator.free(base_ref); // Handles all cases: arg, env, or default
-    std.debug.print("\x1b[34m🎯 Base Ref: {s}\x1b[0m\n\n", .{base_ref});
+    defer allocator.free(base_ref);
 
-    if (is_affected and orch == .none) {
-        std.debug.print("\x1b[33m⚠️  Warning: --affected flag requires nx or turbo\x1b[0m\n", .{});
+    const ci = detect.detectCIRunner();
+    const branch = detect.getCurrentBranch(allocator, ci);
+    defer if (branch) |b| allocator.free(b);
+
+    // On the base branch itself a diff against base is empty, so compare with the previous commit
+    const affected_base: ?[]const u8 = if (is_affected and (orch == .nx or orch == .turbo))
+        (if (detect.isOnBaseBranch(base_ref, branch orelse "")) "HEAD~1" else base_ref)
+    else
+        null;
+
+    if (cfg.verbose) {
+        std.debug.print("\x1b[34m🧭 CI: {s}, branch: {s}, base ref: {s}\x1b[0m\n\n", .{ @tagName(ci), branch orelse "(unknown)", base_ref });
+    }
+    if (affected_base) |base| {
+        std.debug.print("\x1b[34m🎯 Affected since: {s}\x1b[0m\n\n", .{base});
     }
 
     var ran_something = false;
     var had_error = false;
-
-    const tasks = [_]struct { flag: []const u8, alt_flag: ?[]const u8, name: []const u8 }{
-        .{ .flag = "--format", .alt_flag = "--prettier", .name = "format" },
-        .{ .flag = "--lint", .alt_flag = null, .name = "lint" },
-        .{ .flag = "--typecheck", .alt_flag = null, .name = "typecheck" },
-        .{ .flag = "--test", .alt_flag = null, .name = "test" },
-        .{ .flag = "--build", .alt_flag = null, .name = "build" },
-    };
 
     if (cfg.parallel) {
         var failed = std.atomic.Value(bool).init(false);
@@ -57,11 +74,9 @@ pub fn main() !void {
         defer threads.deinit(allocator);
 
         for (tasks) |task| {
-            if (utils.hasArg(args, task.flag) or
-                (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?)))
-            {
+            if (isSelected(args, task)) {
                 const t = try std.Thread.spawn(.{}, runTaskInThread, .{
-                    &failed, allocator, mgr, orch, task.name, is_affected, base_ref, cfg,
+                    &failed, allocator, mgr, orch, task.name, affected_base, cfg,
                 });
                 try threads.append(allocator, t);
                 ran_something = true;
@@ -72,9 +87,8 @@ pub fn main() !void {
         had_error = failed.load(.monotonic);
     } else {
         for (tasks) |task| {
-            const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
-            if (match) {
-                runner.runTask(allocator, mgr, orch, task.name, is_affected, base_ref, cfg) catch {
+            if (isSelected(args, task)) {
+                runner.runTask(allocator, mgr, orch, task.name, affected_base, cfg) catch {
                     had_error = true;
                 };
                 ran_something = true;
@@ -89,15 +103,20 @@ pub fn main() !void {
     }
 }
 
+fn isSelected(args: []const []const u8, task: Task) bool {
+    if (utils.hasArg(args, task.flag)) return true;
+    if (task.alt_flag) |alt| return utils.hasArg(args, alt);
+    return false;
+}
+
 fn runTaskInThread(
     failed: *std.atomic.Value(bool),
     allocator: std.mem.Allocator,
     mgr: detect.Manager,
     orch: detect.Orchestrator,
     target: []const u8,
-    affected: bool,
-    base_ref: []const u8,
+    affected_base: ?[]const u8,
     cfg: config.Config,
 ) void {
-    runner.runTask(allocator, mgr, orch, target, affected, base_ref, cfg) catch failed.store(true, .monotonic);
+    runner.runTask(allocator, mgr, orch, target, affected_base, cfg) catch failed.store(true, .monotonic);
 }

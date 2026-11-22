@@ -56,3 +56,22 @@ pub fn resolveBaseRef(allocator: std.mem.Allocator, args: []const []const u8) ![
 
     return try allocator.dupe(u8, "origin/main");
 }
+
+/// True when the current branch is the branch `base_ref` points to (e.g. `main` vs `origin/main`).
+/// Diffing a branch against itself finds nothing, so callers fall back to the previous commit.
+pub fn isOnBaseBranch(base_ref: []const u8, branch: []const u8) bool {
+    if (branch.len == 0) return false;
+    if (std.mem.eql(u8, base_ref, branch)) return true;
+    const remote = "origin/";
+    return std.mem.startsWith(u8, base_ref, remote) and std.mem.eql(u8, base_ref[remote.len..], branch);
+}
+
+test "isOnBaseBranch" {
+    try std.testing.expect(isOnBaseBranch("origin/main", "main"));
+    try std.testing.expect(isOnBaseBranch("main", "main"));
+    try std.testing.expect(isOnBaseBranch("origin/release/1.0", "release/1.0"));
+    try std.testing.expect(!isOnBaseBranch("origin/main", "ain"));
+    try std.testing.expect(!isOnBaseBranch("origin/main", "feature/main"));
+    try std.testing.expect(!isOnBaseBranch("origin/master", "main"));
+    try std.testing.expect(!isOnBaseBranch("origin/main", ""));
+}
