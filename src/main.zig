@@ -51,6 +51,7 @@ pub fn main() !void {
     };
 
     if (cfg.parallel) {
+        var failed = std.atomic.Value(bool).init(false);
         var threads = std.ArrayList(std.Thread).empty;
         defer threads.deinit(allocator);
 
@@ -58,8 +59,8 @@ pub fn main() !void {
             if (utils.hasArg(args, task.flag) or
                 (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?)))
             {
-                const t = try std.Thread.spawn(.{}, runner.runTask, .{
-                    allocator, mgr, orch, task.name, is_affected, base_ref, cfg,
+                const t = try std.Thread.spawn(.{}, runTaskInThread, .{
+                    &failed, allocator, mgr, orch, task.name, is_affected, base_ref, cfg,
                 });
                 try threads.append(allocator, t);
                 ran_something = true;
@@ -67,6 +68,7 @@ pub fn main() !void {
         }
 
         for (threads.items) |t| t.join();
+        had_error = failed.load(.monotonic);
     } else {
         for (tasks) |task| {
             const match = utils.hasArg(args, task.flag) or (task.alt_flag != null and utils.hasArg(args, task.alt_flag.?));
@@ -84,4 +86,17 @@ pub fn main() !void {
     } else if (had_error) {
         std.process.exit(1);
     }
+}
+
+fn runTaskInThread(
+    failed: *std.atomic.Value(bool),
+    allocator: std.mem.Allocator,
+    mgr: detect.Manager,
+    orch: detect.Orchestrator,
+    target: []const u8,
+    affected: bool,
+    base_ref: []const u8,
+    cfg: config.Config,
+) void {
+    runner.runTask(allocator, mgr, orch, target, affected, base_ref, cfg) catch failed.store(true, .monotonic);
 }
