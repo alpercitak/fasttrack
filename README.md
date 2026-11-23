@@ -63,6 +63,11 @@ Tasks always run in the fixed order format → lint → typecheck → test → b
 following ones, but fasttrack exits with code `1` if any task failed. Unknown options or no task at all exit with
 code `2`.
 
+With `--parallel` and nx or turbo, all tasks go to the orchestrator in a single call (for example
+`nx run-many -t lint test build --all` or `turbo run lint test build`), so it schedules them, uses its cache and keeps
+the output of each task together. Without an orchestrator, each package script starts in its own process at the same
+time, and their output may interleave.
+
 ## Integration with Monorepos
 
 ### In nx Monorepo

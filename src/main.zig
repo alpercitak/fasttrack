@@ -77,35 +77,17 @@ pub fn main() !void {
         std.debug.print("\x1b[34m🎯 Affected since: {s}\x1b[0m\n\n", .{base});
     }
 
-    var had_error = false;
-
-    if (cfg.parallel) {
-        var failed = std.atomic.Value(bool).init(false);
-        var threads = std.ArrayList(std.Thread).empty;
-        defer threads.deinit(allocator);
-
-        for (tasks) |task| {
-            if (isSelected(args, task)) {
-                const t = try std.Thread.spawn(.{}, runTaskInThread, .{
-                    &failed, allocator, mgr, orch, task.name, affected_base, cfg,
-                });
-                try threads.append(allocator, t);
-            }
-        }
-
-        for (threads.items) |t| t.join();
-        had_error = failed.load(.monotonic);
-    } else {
-        for (tasks) |task| {
-            if (isSelected(args, task)) {
-                runner.runTask(allocator, mgr, orch, task.name, affected_base, cfg) catch {
-                    had_error = true;
-                };
-            }
+    var selected: [tasks.len][]const u8 = undefined;
+    var count: usize = 0;
+    for (tasks) |task| {
+        if (isSelected(args, task)) {
+            selected[count] = task.name;
+            count += 1;
         }
     }
 
-    if (had_error) std.process.exit(1);
+    const ok = try runner.runTasks(allocator, mgr, orch, selected[0..count], affected_base, cfg);
+    if (!ok) std.process.exit(1);
 }
 
 const options = [_][]const u8{ "--affected", "--parallel", "--verbose", "--quiet", "--help", "-h" };
@@ -133,18 +115,6 @@ fn isSelected(args: []const []const u8, task: Task) bool {
     if (utils.hasArg(args, task.flag)) return true;
     if (task.alt_flag) |alt| return utils.hasArg(args, alt);
     return false;
-}
-
-fn runTaskInThread(
-    failed: *std.atomic.Value(bool),
-    allocator: std.mem.Allocator,
-    mgr: detect.Manager,
-    orch: detect.Orchestrator,
-    target: []const u8,
-    affected_base: ?[]const u8,
-    cfg: config.Config,
-) void {
-    runner.runTask(allocator, mgr, orch, target, affected_base, cfg) catch failed.store(true, .monotonic);
 }
 
 test {
