@@ -124,7 +124,9 @@ jobs:
           args: --lint --test --build --affected
 ```
 
-`@v0` resolves to the newest `v0.x.y` release. Pin an exact release (e.g. `@v0.2.2`) for fully reproducible builds.
+`@v0` resolves to the newest `v0.x.y` release. Pin an exact release (e.g. `@v0.3.2`) for fully reproducible builds.
+Before v0.3.2 a pin did not select the binary, which was always the newest release; on v0.3.0 or v0.3.1, pass
+`version: v0.3.x` as well.
 
 When running on the base branch itself (e.g. a push to `main`), `--affected` compares against `HEAD~1`, which only
 covers the last commit. To cover every commit in a push, pass the previous head explicitly:
