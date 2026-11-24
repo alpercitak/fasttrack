@@ -5,12 +5,12 @@
 ![Build](https://img.shields.io/github/actions/workflow/status/alpercitak/fasttrack/build-release.yaml?style=flat-square&label=&color=2ea44f)
 ![License](https://img.shields.io/badge/MIT-2ea44f?style=flat-square)
 
-A blazingly fast monorepo task runner written in Zig. Automatically detects your package manager (pnpm, npm, yarn, bun) and orchestrator (nx, turbo, bun), providing a unified CLI for running tasks across your monorepo.
+A blazingly fast monorepo task runner written in Zig. Automatically detects your package manager (pnpm, npm, yarn, bun) and orchestrator (nx or turbo), providing a unified CLI for running tasks across your monorepo.
 
 ## Features
 
 - ⚡ **Lightning fast** - Built in Zig with zero runtime overhead
-- 🔍 **Auto-detection** - Detects nx, turbo, or bun automatically
+- 🔍 **Auto-detection** - Detects nx or turbo automatically
 - 📦 **Package manager agnostic** - Works with pnpm, npm, yarn, or bun
 - 🎯 **Affected-only mode** - Run tasks only on changed packages (requires nx or turbo)
 - 🔗 **Chainable tasks** - Run multiple checks in a single command
@@ -144,7 +144,7 @@ covers the last commit. To cover every commit in a push, pass the previous head 
 
 ### Command Mapping
 
-| Input | nx | turbo | bun / none |
+| Input | nx | turbo | none |
 |-------|----|-------|------------|
 | `--lint` | `<exec> nx run-many -t lint --all` | `<exec> turbo run lint` | `<manager> run lint` |
 | `--lint --affected` | `<exec> nx affected -t lint --base=origin/main` | `<exec> turbo run lint --filter=[origin/main...HEAD]` | (not applicable) |

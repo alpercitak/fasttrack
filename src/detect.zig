@@ -1,14 +1,13 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
-pub const Orchestrator = enum { nx, turbo, bun, none };
+pub const Orchestrator = enum { nx, turbo, none };
 pub const Manager = enum { pnpm, bun, npm, yarn };
 pub const CIRunner = enum { github, gitlab, bitbucket, generic };
 
 pub fn detectOrchestrator() Orchestrator {
     if (utils.fileExists("nx.json")) return .nx;
     if (utils.fileExists("turbo.json")) return .turbo;
-    if (utils.fileExists("bunfig.toml")) return .bun;
     return .none;
 }
 

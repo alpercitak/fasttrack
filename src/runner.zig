@@ -163,5 +163,5 @@ test "buildArgv: turbo with several targets" {
 
 test "buildArgv: no orchestrator ignores affected" {
     try expectArgv(&.{ "npm", "run", "lint" }, .npm, .none, &.{"lint"}, null);
-    try expectArgv(&.{ "bun", "run", "lint" }, .bun, .bun, &.{"lint"}, "origin/main");
+    try expectArgv(&.{ "bun", "run", "lint" }, .bun, .none, &.{"lint"}, "origin/main");
 }
