@@ -9,12 +9,12 @@ pub fn printHelp() void {
         \\Tasks:
         \\  --lint         Run linting
         \\  --test         Run tests
-        \\  --format       Run formatter (Prettier)
+        \\  --format       Run formatter (alias: --prettier)
         \\  --build        Run build
         \\  --typecheck    Run type checking
         \\
         \\Options:
-        \\  --affected     Only run on affected projects
+        \\  --affected     Only run on affected projects (requires nx/turbo)
         \\  --base=<ref>   Base git ref for --affected (default: origin/main)
         \\  --parallel     Run tasks in parallel
         \\  --quiet        Hide task output (only show status lines)
