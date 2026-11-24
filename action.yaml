@@ -44,7 +44,7 @@ runs:
           # Moving major tag (e.g. v0) has no release of its own: resolve to the newest vX.Y.Z release
           MAJOR="$VERSION"
           VERSION=$(gh release list --repo "$ACTION_REPO" --limit 100 --json tagName --jq '.[].tagName' \
-            | grep -E "^${MAJOR}\.[0-9]+\.[0-9]+$" | head -n 1 || true)
+            | grep -E "^${MAJOR}\.[0-9]+\.[0-9]+$" | sort -V | tail -n 1 || true)
           if [ -z "$VERSION" ]; then
             echo "::error::No release found for major version ${MAJOR}"
             exit 1
