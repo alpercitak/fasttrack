@@ -97,12 +97,15 @@ jobs:
             **Windows:**
             Download the `.exe`, rename to `fasttrack.exe`, and add it to your PATH.
 
-      - name: Update v0 moving tag
+      - name: Update moving major tag
+        # Pre-releases (v1.0.0-rc1) must not move the tag stable users follow
+        if: ${{ !contains(github.ref_name, '-') }}
         run: |
+          MAJOR="${GITHUB_REF_NAME%%.*}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f v0
-          git push origin v0 --force
+          git tag -f "$MAJOR"
+          git push origin "$MAJOR" --force
 
   check:
     name: Lint & Test
