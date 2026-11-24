@@ -46,12 +46,14 @@ pub fn getCurrentBranch(allocator: std.mem.Allocator, runner: CIRunner) ?[]const
 
 // Determine Base Reference (Priority: --base flag > FASTTRACK_BASE env > origin/main)
 pub fn resolveBaseRef(allocator: std.mem.Allocator, args: []const []const u8) ![]const u8 {
+    // Empty values (e.g. an unset CI variable expanded to "") count as not given
     if (utils.getArgValue(args, "--base=")) |val| {
-        return try allocator.dupe(u8, val);
+        if (val.len > 0) return try allocator.dupe(u8, val);
     }
 
     if (std.process.getEnvVarOwned(allocator, "FASTTRACK_BASE")) |env_val| {
-        return env_val;
+        if (env_val.len > 0) return env_val;
+        allocator.free(env_val);
     } else |_| {}
 
     return try allocator.dupe(u8, "origin/main");
@@ -64,6 +66,18 @@ pub fn isOnBaseBranch(base_ref: []const u8, branch: []const u8) bool {
     if (std.mem.eql(u8, base_ref, branch)) return true;
     const remote = "origin/";
     return std.mem.startsWith(u8, base_ref, remote) and std.mem.eql(u8, base_ref[remote.len..], branch);
+}
+
+test "resolveBaseRef" {
+    const a = std.testing.allocator;
+    const given = try resolveBaseRef(a, &.{ "fasttrack", "--base=origin/dev" });
+    defer a.free(given);
+    try std.testing.expectEqualStrings("origin/dev", given);
+
+    // Falls through to FASTTRACK_BASE or the default, depending on the environment
+    const empty = try resolveBaseRef(a, &.{ "fasttrack", "--base=" });
+    defer a.free(empty);
+    try std.testing.expect(empty.len > 0);
 }
 
 test "isOnBaseBranch" {
