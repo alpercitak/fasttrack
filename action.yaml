@@ -30,13 +30,18 @@ runs:
         EXT=""
         if [[ "$OS" == "windows" ]]; then EXT=".exe"; fi
 
-        # 2. Determine Repository (with fallback to avoid empty string errors)
-        ACTION_REPO="${{ github.action_repository }}"
-        if [ -z "$ACTION_REPO" ]; then ACTION_REPO="alpercitak/fasttrack"; fi
-
-        # 3. Determine the version
+        # 2. Determine repository and version. github.action_repository and github.action_ref are
+        # empty in composite actions, so read them from the checkout path .../_actions/<owner>/<repo>/<ref>.
+        # A local `uses: ./` has no such path and falls back to the newest release.
+        ACTION_REPO="alpercitak/fasttrack"
         VERSION="$REQUESTED_VERSION"
-        if [ -z "$VERSION" ]; then VERSION="${{ github.action_ref }}"; fi
+        ACTION_DIR="${GITHUB_ACTION_PATH//\\//}"
+        if [[ "$ACTION_DIR" =~ /_actions/([^/]+/[^/]+)/([^/]+)$ ]]; then
+          ACTION_REPO="${BASH_REMATCH[1]}"
+          if [ -z "$VERSION" ]; then VERSION="${BASH_REMATCH[2]}"; fi
+        fi
+
+        # 3. Resolve the version
         if [[ "$VERSION" == "main" || "$VERSION" == "master" || -z "$VERSION" ]]; then
           echo "Looking for newest available release..."
           VERSION=$(gh release view --repo "$ACTION_REPO" --json tagName --jq '.tagName')
